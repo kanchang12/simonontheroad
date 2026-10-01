@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Outreach Capture - prototype</title>
+<style>
+:root{--bg:#f4f6f5;--card:#fff;--ink:#17232b;--mut:#62717a;--line:#d9e0e0;--pri:#0f6e5e;--flag:#fff4cc;--flagl:#ecd77a;--flagt:#6f5500;--bad:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:2}
+main{max-width:720px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+input,select,textarea,button{font:inherit}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+textarea{min-height:110px}
+label{display:block;font-size:14px;color:var(--mut);margin:10px 0 4px}
+label.chk{display:flex;gap:8px;align-items:flex-start;color:var(--ink)}
+label.chk input{width:auto;margin-top:4px}
+button{padding:10px 14px;border-radius:8px;border:1px solid var(--pri);background:var(--pri);color:#fff;cursor:pointer}
+button.sec{background:#fff;color:var(--pri)}
+button.danger{background:#fff;color:var(--bad);border-color:var(--bad)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #7ab8ad;outline-offset:1px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.grid .full{grid-column:1/-1}
+@media(max-width:520px){.grid{grid-template-columns:1fr}}
+.case{cursor:pointer}.case:hover{border-color:var(--pri)}
+.mut{color:var(--mut);font-size:14px}
+.sug{background:#fff8dc}
+.badge{font-size:12px;color:var(--flagt);margin-left:8px}
+.hide{display:none}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:6px}
+.strip div{background:var(--flag);border:1px solid var(--flagl);border-radius:8px;padding:8px}
+.strip small{display:block;color:var(--flagt);font-size:13px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:14px 0;overflow-x:auto}
+.tabs button{background:none;color:var(--mut);border:0;border-bottom:3px solid transparent;border-radius:0;white-space:nowrap}
+.tabs button.on{color:var(--pri);border-color:var(--pri)}
+.rec{color:var(--bad);font-weight:600}
+img.ph{width:88px;height:88px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.warn{background:var(--flag);border:1px solid var(--flagl);border-radius:8px;padding:8px 10px;font-size:14px;margin-top:10px}
+pre{white-space:pre-wrap;font:inherit;margin:0}
+</style></head><body>
+<header><b>Outreach Capture <span class="mut">prototype</span></b><button class="sec" onclick="home()">Home</button></header>
+<main>
+
+<section id="home">
+  <div class="row" style="margin-bottom:12px">
+    <input id="q" placeholder="Search name, nickname, phone, location" oninput="list()" style="flex:1;min-width:200px">
+    <button onclick="edit()">New case</button>
+  </div>
+  <div id="list"></div>
+  <div id="demo" class="mut"><button class="sec" onclick="seed()">Add 2 demo cases</button></div>
+</section>
+
+<section id="edit" class="hide">
+  <div class="card">
+    <b>Record conversation</b>
+    <label class="chk"><input type="checkbox" id="consent"> The person has been told about the recording and agreed.</label>
+    <label for="model">Transcription model (downloads once, then works offline)</label>
+    <select id="model" onchange="asr=null">
+      <option value="Xenova/whisper-tiny.en">Tiny - about 75 MB, fastest</option>
+      <option value="Xenova/whisper-base.en">Base - about 150 MB, more accurate</option>
+    </select>
+    <div class="row" style="margin-top:10px">
+      <button id="rb" onclick="toggleRec()">Start recording</button>
+      <span id="tm" class="rec"></span>
+    </div>
+    <div class="warn">Keep this screen on while recording. Locking the phone or switching apps stops it.</div>
+    <div id="recs" style="margin-top:10px"></div>
+    <label for="tr">Transcript - check and edit before sending</label>
+    <textarea id="tr"></textarea>
+    <div class="row" style="margin-top:8px"><button onclick="send()">Send text</button><span id="st" class="mut"></span></div>
+  </div>
+  <div class="card">
+    <b>Case details</b>
+    <div class="mut">Yellow fields were suggested from the transcript. Check them; editing a field confirms it.</div>
+    <div class="grid" id="fields"></div>
+    <label for="ph">Photo (for visual confirmation only)</label>
+    <input type="file" id="ph" accept="image/*" onchange="pick(this)">
+    <img id="pv" class="ph hide" style="margin-top:8px">
+    <div class="row" style="margin-top:14px"><button onclick="save()">Save case</button><button class="sec" onclick="home()">Cancel</button></div>
+  </div>
+</section>
+
+<section id="view" class="hide"></section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const F=['name','alias','phone','location','address','dob','age','gender','ethnicity','physical','contact','ni','project','keyworker','consent','consentdate','risk','risknotes','situation','notes'];
+const L={name:'Full name or known name',alias:'Other names or nicknames',phone:'Phone number',location:'Location',address:'Address (optional)',dob:'Date of birth',age:'Age',gender:'Gender',ethnicity:'Ethnicity',physical:'Physical description',contact:'Other contact details',ni:'National Insurance number',project:'Project',keyworker:'Allocated key worker',consent:'Consent status',consentdate:'Consent date',risk:'Risk rating',risknotes:'Risk notes',situation:'Current situation',notes:'Case notes'};
+const SIT=['Not recorded','Rough sleeping','Temporary accommodation','Hotel','Housed','Unknown'];
+const OPT={ethnicity:['Not recorded','Asian or Asian British','Black, Black British, Caribbean or African','Mixed or multiple ethnic groups','White','Other ethnic group','Prefer not to say'],project:['Select a project','Core','Settled EU'],keyworker:['Demo (you)','Nkere-Awaji'],consent:['Not required yet','Given','Declined'],risk:['Green','Amber','Red'],situation:SIT};
+const TYPE={dob:'date',consentdate:'date',age:'number'},BIG=['physical','contact','risknotes','notes'];
+let pending={facts:[],summary:''};
+const EP='/api/extract';
+let cases=JSON.parse(localStorage.getItem('cases')||'[]'),cur=null,photo='',asr=null,mr,chunks=[],timer,wake;
+const store=()=>localStorage.setItem('cases',JSON.stringify(cases));
+
+/* ---------- audio store (kept until the worker deletes it) ---------- */
+const db=new Promise(r=>{const q=indexedDB.open('oc',1);q.onupgradeneeded=()=>q.result.createObjectStore('a',{keyPath:'id'});q.onsuccess=()=>r(q.result)});
+const tx=async(m,f)=>{const d=await db;return new Promise(r=>{const q=f(d.transaction('a',m).objectStore('a'));q.onsuccess=()=>r(q.result)})};
+
+/* ---------- screens ---------- */
+function show(id){['home','edit','view'].forEach(s=>$(s).classList.toggle('hide',s!==id))}
+function home(){show('home');list()}
+function lev(a,b){const d=Array.from({length:a.length+1},(_,i)=>[i,...Array(b.length).fill(0)]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+function match(c,q){q=q.toLowerCase().trim();if(!q)return true;const h=[c.name,c.alias,c.phone,c.location].join(' ').toLowerCase();return h.includes(q)||q.split(/\s+/).every(w=>h.split(/\s+/).some(x=>lev(w,x)<=Math.floor(w.length/4)))}
+function list(){
+  const r=cases.filter(c=>match(c,$('q').value));
+  $('list').innerHTML=r.length?r.map(c=>`<div class="card case" onclick="view('${c.id}')"><b>${esc(c.name||'Unnamed')}</b> <span class="mut">${esc(c.alias)}</span><div class="mut">${esc(c.situation)} - ${esc(c.location)||'no location'}</div></div>`).join(''):'<div class="card mut">No cases match. Use New case to add one.</div>';
+  $('demo').classList.toggle('hide',cases.length>0);
+}
+function seed(){
+  const d=n=>new Date(Date.now()-n*864e5).toISOString();
+  cases.push({id:'d1',name:'Demo Person One',alias:'Jay',age:'40',location:'Bus station, Leeds',situation:'Rough sleeping',consent:'Given',risk:'Amber',project:'Core',keyworker:'Demo (you)',reports:[
+   {date:d(14),transcript:'Demo transcript one.',summary:'First contact at the bus station. Asthma, no inhaler. Has not claimed Universal Credit.',facts:[{category:'health',text:'Asthma'},{category:'benefits',text:'Has not claimed Universal Credit'},{category:'followup',text:'Help book GP appointment for inhaler'}]},
+   {date:d(7),transcript:'Demo transcript two.',summary:'Universal Credit claim started. Still has asthma. Needs warm clothing.',facts:[{category:'health',text:'Asthma'},{category:'benefits',text:'Universal Credit claim started'},{category:'need',text:'Warm clothing'},{category:'followup',text:'Check Universal Credit interview date'}]},
+   {date:d(1),transcript:'Demo transcript three.',summary:'Chest infection. Universal Credit interview booked.',facts:[{category:'health',text:'Chest infection'},{category:'benefits',text:'Universal Credit claim started'}]}]},
+  {id:'d2',name:'Demo Person Two',location:'Market car park',situation:'Temporary accommodation',consent:'Not required yet',risk:'Green',reports:[]});
+  store();list();
+}
+
+function edit(id){
+  cur=id||null;photo='';const c=cases.find(x=>x.id==id)||{};
+  $('fields').innerHTML=F.map(k=>{
+    const inp=OPT[k]?`<select id="f_${k}">${OPT[k].map(o=>`<option>${o}</option>`).join('')}</select>`:BIG.includes(k)?`<textarea id="f_${k}"></textarea>`:`<input id="f_${k}" type="${TYPE[k]||'text'}">`;
+    return `<div class="${BIG.includes(k)?'full':''}"><label for="f_${k}">${L[k]}<span class="badge hide" id="b_${k}">suggested - check</span></label>${inp}</div>`;
+  }).join('');
+  F.forEach(k=>{const e=$('f_'+k);e.value=c[k]||(OPT[k]?OPT[k][0]:'');e.addEventListener('input',()=>{e.classList.remove('sug');$('b_'+k).classList.add('hide')})});
+  pending={facts:[],summary:''};
+  photo=c.photo||'';$('pv').src=photo;$('pv').classList.toggle('hide',!photo);
+  $('tr').value='';$('st').textContent='';$('consent').checked=false;
+  recs();show('edit');
+}
+function pick(i){
+  const f=i.files[0];if(!f)return;const im=new Image();
+  im.onload=()=>{const s=Math.min(1,320/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);photo=c.toDataURL('image/jpeg',.7);$('pv').src=photo;$('pv').classList.remove('hide')};
+  im.src=URL.createObjectURL(f);
+}
+function save(){
+  const c=cases.find(x=>x.id==cur)||{id:String(Date.now()),reports:[]};
+  F.forEach(k=>c[k]=$('f_'+k).value);c.photo=photo;
+  const t=$('tr').value.trim();if(t)c.reports.push({date:new Date().toISOString(),transcript:t,summary:pending.summary,facts:pending.facts});
+  if(!cases.includes(c))cases.push(c);
+  store();view(c.id);
+}
+/* Merge facts across all conversations: repeats collapse into one line with a count; follow-ups stay separate so they can be ticked off. */
+const fx=(c,cat)=>{const m=new Map();(c.reports||[]).forEach((r,ri)=>(r.facts||[]).forEach((f,fi)=>{if(f.category!==cat)return;const k=cat==='followup'?ri+'-'+fi:f.text.toLowerCase();const o=m.get(k);m.set(k,{...f,ri,fi,date:r.date,n:(o?o.n:0)+1,first:o?o.first:r.date})}));return[...m.values()].sort((a,b)=>b.date.localeCompare(a.date))};
+const knownFacts=()=>{const c=cases.find(x=>x.id==cur);return c?['health','benefits','need'].flatMap(k=>fx(c,k).map(f=>f.text)):[]};
+function view(id){
+  cur=id;const c=cases.find(x=>x.id==id),R=c.reports||[],last=R[R.length-1],h=fx(c,'health'),open=fx(c,'followup').filter(f=>!f.done);
+  const flag=(a,v,bad)=>`<div${bad?' style="background:#fde3e1;border-color:#e8a29d"':''}><small>${a}</small>${esc(v)}</div>`;
+  $('view').innerHTML=`<div class="card row">${c.photo?`<img class="ph" src="${c.photo}" alt="">`:''}<div style="flex:1"><h2 style="margin:0">${esc(c.name||'Unnamed')}</h2><div class="mut">${esc(c.alias)}</div></div><button onclick="edit('${id}')">Add conversation or edit</button></div>
+  <div class="strip">${flag('Risk',c.risk,c.risk==='Red')}${flag('Consent',c.consent)}${flag('Situation',c.situation)}${flag('Health flags',h.length?h[0].text+(h.length>1?' (+'+(h.length-1)+' more)':''):'None recorded')}${flag('Open follow-ups',open.length)}${flag('Last contact',last?last.date.slice(0,10):'None yet')}${flag('Conversations',R.length)}</div>
+  <div class="tabs">${['Health','Benefits','Needs and follow-ups','Conversations','Personal details'].map((t,i)=>`<button onclick="tab(this,${i})">${t}</button>`).join('')}</div><div id="tp" class="card"></div>`;
+  show('view');tab($('view').querySelector('.tabs button'),0);
+}
+function tab(b,i){
+  b.parentNode.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  const c=cases.find(x=>x.id==cur),R=c.reports||[];
+  const fl=(a,e)=>a.length?a.map(f=>`<div style="margin:0 0 10px">${esc(f.text)}<div class="mut">First noted ${f.first.slice(0,10)}${f.n>1?' - mentioned '+f.n+' times, latest '+f.date.slice(0,10):''}</div></div>`).join(''):`<div class="mut">${e}</div>`;
+  const fu=fx(c,'followup').map(f=>`<label class="chk" style="margin:0 0 8px"><input type="checkbox" ${f.done?'checked':''} onchange="done(${f.ri},${f.fi})"><span>${esc(f.text)} <span class="mut">${f.date.slice(0,10)}</span></span></label>`).join('');
+  const row=(a,v)=>`<div class="mut">${a}</div><div style="margin-bottom:8px">${esc(v)||'Not recorded'}</div>`;
+  $('tp').innerHTML=[
+    fl(fx(c,'health'),'No health information recorded yet.'),
+    fl(fx(c,'benefits'),'No benefits information recorded yet.'),
+    '<b>Needs</b><div style="margin:6px 0 14px">'+fl(fx(c,'need'),'None recorded.')+'</div><b>Follow-ups</b><div style="margin-top:6px">'+(fu||'<div class="mut">None recorded.</div>')+'</div>',
+    R.length?[...R].reverse().map(r=>`<div style="margin-bottom:14px"><div class="mut">${r.date.slice(0,16).replace('T',' ')}</div>${esc(r.summary)||'<span class="mut">No summary.</span>'}<details><summary class="mut">Transcript</summary><pre>${esc(r.transcript)}</pre></details></div>`).join(''):'<div class="mut">No conversations recorded yet.</div>',
+    F.map(k=>row(L[k],c[k])).join('')
+  ][i];
+}
+function done(ri,fi){const c=cases.find(x=>x.id==cur),f=c.reports[ri].facts[fi];f.done=!f.done;store();view(cur);tab($('view').querySelectorAll('.tabs button')[2],2)}
+
+/* ---------- recording ---------- */
+async function toggleRec(){
+  if(mr&&mr.state==='recording'){mr.stop();return}
+  if(!$('consent').checked)return alert('Confirm the person has agreed to be recorded first.');
+  let st;try{st=await navigator.mediaDevices.getUserMedia({audio:true})}catch{return alert('Microphone blocked. Allow it in the browser settings.')}
+  mr=new MediaRecorder(st);chunks=[];
+  mr.ondataavailable=e=>chunks.push(e.data);
+  mr.onstop=async()=>{
+    st.getTracks().forEach(t=>t.stop());clearInterval(timer);$('tm').textContent='';$('rb').textContent='Start recording';
+    try{wake&&wake.release()}catch{}
+    const id=Date.now();await tx('readwrite',s=>s.put({id,blob:new Blob(chunks,{type:mr.mimeType})}));recs();transcribe(id);
+  };
+  mr.start(1000);const t0=Date.now();$('rb').textContent='Stop recording';
+  timer=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);$('tm').textContent='Recording '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},500);
+  try{wake=await navigator.wakeLock.request('screen')}catch{}
+}
+async function recs(){
+  const all=await tx('readonly',s=>s.getAll());
+  $('recs').innerHTML=all.length?'<div class="mut">Saved audio stays on this phone until you delete it.</div>'+all.map(r=>`<div class="row" style="margin:6px 0"><audio controls src="${URL.createObjectURL(r.blob)}" style="max-width:100%"></audio><button class="sec" onclick="transcribe(${r.id})">Transcribe</button><button class="danger" onclick="del(${r.id})">Delete</button></div>`).join(''):'';
+}
+async function del(id){if(confirm('Delete this audio from the phone?')){await tx('readwrite',s=>s.delete(id));recs()}}
+const say=t=>$('st').textContent=t;
+
+/* ---------- on-device transcription (Whisper in the browser) ---------- */
+async function transcribe(id){
+  try{
+    const rec=await tx('readonly',s=>s.get(id));say('Loading model...');
+    if(!asr){
+      const {pipeline}=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers');
+      asr=await pipeline('automatic-speech-recognition',$('model').value,{progress_callback:p=>{if(p.status==='progress')say('Downloading model '+Math.round(p.progress)+'%')}});
+    }
+    say('Transcribing on this phone...');
+    const buf=await new AudioContext({sampleRate:16000}).decodeAudioData(await rec.blob.arrayBuffer());
+    const out=await asr(buf.getChannelData(0),{chunk_length_s:30,stride_length_s:5});
+    $('tr').value+=($('tr').value?'\n':'')+out.text.trim();
+    say('Transcript ready. Check and edit it, then press Send text.');
+  }catch(e){say('Transcription failed: '+e.message)}
+}
+
+/* ---------- send text only, then fill the form ---------- */
+function fill(r){
+  pending={facts:r.facts||[],summary:r.summary||''};
+  Object.entries(r.fields||{}).forEach(([k,v])=>{const e=$('f_'+k);if(e&&v){e.value=v;e.classList.add('sug');$('b_'+k).classList.remove('hide')}});
+  const n=pending.facts.length;say('Extracted '+n+' item'+(n===1?'':'s')+' for the dashboard and filled the yellow fields. Check them, then Save case.');
+}
+async function send(){
+  const text=$('tr').value.trim();if(!text)return say('Nothing to send.');
+  say('Sending text...');
+  try{const r=await fetch(EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,known:knownFacts()})});fill(await r.json())}
+  catch{const q=JSON.parse(localStorage.getItem('queue')||'[]');q.push(text);localStorage.setItem('queue',JSON.stringify(q));say('No signal. Text queued and will send when you are back online.')}
+}
+addEventListener('online',async()=>{
+  if(!EP)return;const q=JSON.parse(localStorage.getItem('queue')||'[]');localStorage.setItem('queue','[]');
+  for(const text of q){try{await fetch(EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})}catch{}}
+});
+home();
+</script></body></html>
